@@ -4,7 +4,7 @@
 
 .DESCRIPTION	
 
-.NOTES				Version 1.19 - 3 June 2016
+.NOTES				Version 1.20 - 13 June 2023
  
 .EXAMPLE			.\ModuleSwitcher.ps1
 .EXAMPLE			.\ModuleSwitcher.ps1 -Force
@@ -27,12 +27,15 @@ PARAM(
 )
 
 if( Test-Path $ModuleSwitchDirPath ) {
-	$ModuleScripts = Get-ChildItem -Path $ModuleSwitchDirPath -Filter 'Module*.ps1' | Sort
+	$ModuleScripts = Get-ChildItem -Path $ModuleSwitchDirPath -Filter 'Module*.ps1' | Sort-Object
 	$numButtons = $ModuleScripts.Count
 } else {
 	Write-Host -ForegroundColor Red "ERROR - Unable to locate $ModuleSwitchDirPath"
 	exit
 }
+
+#Disable the LabCheck Job -- DOUG (not sure why this was in here - 6/2023)
+#Disable-ScheduledTask -TaskName "LabCheck"
 
 $ModuleSwitchDirName = $ModuleSwitchDirPath | Split-Path -Leaf
 if( $PanelName.Length -eq 0 ) {
@@ -73,7 +76,7 @@ if( ($age -ge 1) -or $Force ) {
 	}
 } else {
 	$global:activeModule = [int](Get-Content $activeModuleFile) + 0
-	#Write-Host "Active Module File found - Active module is $global:activeModule"
+	Write-Host "Active Module File found - Active module is $global:activeModule"
 }
 # Create a hashtable of Start buttons here
 $StartButtons = @{}
@@ -163,10 +166,12 @@ function DisablePrevious {
 function DisplayModuleSwitcherForm {
 
 	#Import the required Assemblies
-	[reflection.assembly]::loadwithpartialname("System.Drawing") | Out-Null
-	[reflection.assembly]::loadwithpartialname("System.Windows.Forms") | Out-Null
+	# [reflection.assembly]::loadwithpartialname("System.Drawing") | Out-Null
+	# [reflection.assembly]::loadwithpartialname("System.Windows.Forms") | Out-Null
+	# New for PS 7 - DB 6/2023
+	Add-Type -AssemblyName System.Windows.Forms
 
-	$moduleSwitcherForm = New-Object System.Windows.Forms.Form
+	$moduleSwitcherForm = New-Object Windows.Forms.Form
 
 	$InitialFormWindowState = New-Object System.Windows.Forms.FormWindowState
 	
@@ -191,7 +196,7 @@ function DisplayModuleSwitcherForm {
 		
 		$buttonAction = ($this.Text).ToUpper()
 		
-		$ScriptPath = ($ModuleScripts | where { $_.Name -match "Module$numModule" | select -first 1 }).FullName
+		$ScriptPath = ($ModuleScripts | Where-Object { $_.Name -match "Module$numModule" | Select-Object -first 1 }).FullName
 		
 		#If we are issuing a START, must call STOP on the active module
 		if( $buttonAction -eq 'START' ) {
@@ -204,11 +209,11 @@ function DisplayModuleSwitcherForm {
 			if( $numActiveModule -ne "00" ) {
 
 				# the currently active module's script, so we can call its STOP action
-				$global:activeModuleScriptPath = ($ModuleScripts | where { $_.Name -match "$numActiveModule" | select -first 1 }).FullName
+				$global:activeModuleScriptPath = ($ModuleScripts | Where-Object { $_.Name -match "$numActiveModule" | Select-Object -first 1 }).FullName
 				try { 
 					if( Test-Path $global:activeModuleScriptPath ) {
 						#do this and then wait for completion prior to continuing
-						Start-Process powershell -ArgumentList "-command $global:activeModuleScriptPath 'STOP'" -Wait
+						Start-Process pwsh -ArgumentList "-command $global:activeModuleScriptPath 'STOP'" -Wait
 					}
 				}
 				catch {
@@ -220,7 +225,7 @@ function DisplayModuleSwitcherForm {
 		
 		try { 
 			if( Test-Path $ScriptPath ) {
-				Start-Process powershell -ArgumentList "-command $ScriptPath $buttonAction"
+				Start-Process pwsh -ArgumentList "-command $ScriptPath $buttonAction"
 				DisablePrevious $thisButton
 				if( $buttonAction -ne 'START' ) { 
 					$buttonName = "Start$thisButton"
@@ -289,7 +294,7 @@ function DisplayModuleSwitcherForm {
 	########################################################################
 	### Status Bar @ Bottom of panel
 	
-	$statusBar1 = New-Object System.Windows.Forms.StatusBar
+	$statusBar1 = New-Object System.Windows.Forms.Label
 	$statusBar1.Name = "statusBar1"
 	$statusBar1.Text = "No active module"
 	$System_Drawing_Size = New-Object System.Drawing.Size
